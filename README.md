@@ -1,6 +1,8 @@
 # rmc-aicli
 
-在 Windows 右键菜单中一键打开 Gemini CLI 的安装与集成项目。包含 Inno Setup 安装器脚本与注册表方案，帮助你在任意文件夹空白处右键，直接打开 PowerShell 并进入该目录运行 `gemini`。
+在 Windows 右键菜单中一键打开 Gemini CLI 等AI命令行工具的傻瓜安装包。包含 Inno Setup 安装器脚本与注册表方案。
+当您在任意文件夹空白处右键，添加一个快捷方式帮助您直接打开 PowerShell 并进入该目录运行如 `gemini` 的命令，助您直达AI命令行工具。
+PS：搭配Nilesoft Shell右键菜单增强工具疗效更好。
 
 ## 功能特性
 - 在 Windows 文件夹空白处右键新增“在此处打开 Gemini CLI”。
