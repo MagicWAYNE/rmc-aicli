@@ -30,6 +30,7 @@ PS：搭配Nilesoft Shell右键菜单增强工具疗效更好。
 2. 在文件夹空白处右键，点击“在此处打开 Gemini CLI”：该方案需要用户自己安装node.js环境，并依赖系统 PATH 中已可直接调用 `gemini`。
 
 ## 构建说明（开发者）
+本项目实质为 Inno Setup 安装器脚本。
 - 使用 Inno Setup（建议 6.x）打开 `GeminiCLI.iss`，编译后生成 `Output/Gemini-CLI-Setup.exe`。
 - 若需离线安装 Node，可将 `node-v22.20.0-x64.msi` 与安装器放同一目录；下载失败时会自动回退为离线包。
 

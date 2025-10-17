@@ -1,4 +1,4 @@
-; Gemini-CLI 安装器（最终版）
+; RMC-AICLI-Gemini 安装器
 ; - Node：在线下载 MSI（PowerShell IWR），若已安装 Node ≥ 20.0.0 则跳过
 ; - npm：以当前登录用户上下文安装 gemini-cli（runasoriginaluser/ExecAsOriginalUser），并把 {userappdata}\npm 追加到用户 PATH
 ; - 右键菜单（Win11 经典菜单，HKCR）：PowerShell 图标，进入所点目录并运行 gemini
@@ -6,12 +6,12 @@
 
 [Setup]
 AppId={{9FCE7DDD-6ECA-4E6E-A7C6-3C6E9C62D499}
-AppName=Gemini-CLI Setup
-AppVersion=1.0.0
-DefaultDirName={pf}\Gemini-CLI
+AppName=RMC-AICLI-Gemini
+AppVersion=0.1.4
+DefaultDirName={pf}\RMC-AICLI-Gemini
 DisableDirPage=yes
 DisableProgramGroupPage=yes
-OutputBaseFilename=Gemini-CLI-Setup
+OutputBaseFilename=RMC-AICLI-Gemini
 Compression=lzma
 SolidCompression=yes
 ArchitecturesInstallIn64BitMode=x64
@@ -33,6 +33,16 @@ Root: HKCR; Subkey: "Directory\Background\shell\OpenGeminiCLI\command"; ValueTyp
 const
   NodeMinVersion = '20.0.0';
   NodeUrl        = 'https://nodejs.org/dist/v22.20.0/node-v22.20.0-x64.msi';
+  StepCount      = 7; // 0..6
+
+var
+  StepsPage: TWizardPage;
+  StepLabels: array[0..StepCount-1] of TNewStaticText;
+  StepNames: array[0..StepCount-1] of string;
+  StepBar: TNewProgressBar;
+  ViewLogBtn: TNewButton;
+  NpmLogPath: string;
+  StepsStarted: Boolean;
 
 function GetVersionPart(const S: string; PartIndex: Integer): Integer;
 var
@@ -101,6 +111,112 @@ begin
     if GetArrayLength(Lines) > 0 then
       Result := Trim(Lines[0]);
   end;
+end;
+
+procedure InitStepNames();
+begin
+  StepNames[0] := '检测 Node 版本';
+  StepNames[1] := '下载 Node（按需）';
+  StepNames[2] := '安装 Node（按需）';
+  StepNames[3] := '更新用户 PATH';
+  StepNames[4] := '安装 gemini-cli';
+  StepNames[5] := '验证 gemini';
+  StepNames[6] := '注册右键菜单';
+end;
+
+procedure SetStepState(Index: Integer; const State: string);
+begin
+  if (Index >= 0) and (Index < StepCount) then begin
+    StepLabels[Index].Caption := State + ' ' + StepNames[Index];
+  end;
+end;
+
+procedure StepPendingAll();
+var
+  i: Integer;
+begin
+  for i := 0 to StepCount-1 do
+    SetStepState(i, '○');
+end;
+
+procedure StepStart(Index: Integer);
+begin
+  SetStepState(Index, '▶');
+  if Assigned(StepBar) then begin
+    StepBar.Style := npbstMarquee;
+  end;
+end;
+
+procedure StepDone(Index: Integer);
+begin
+  SetStepState(Index, '✔');
+  if Assigned(StepBar) then begin
+    StepBar.Style := npbstNormal;
+    StepBar.Position := 0;
+  end;
+end;
+
+procedure StepSkip(Index: Integer);
+begin
+  SetStepState(Index, '✔(跳过)');
+end;
+
+procedure StepFail(Index: Integer);
+begin
+  SetStepState(Index, '✖');
+  if Assigned(StepBar) then begin
+    StepBar.Style := npbstNormal;
+    StepBar.Position := 0;
+  end;
+end;
+
+procedure OnViewLogClick(Sender: TObject);
+var
+  Code: Integer;
+begin
+  if (NpmLogPath <> '') and FileExists(NpmLogPath) then begin
+    ExecAsOriginalUser('notepad.exe', '"' + NpmLogPath + '"', '', SW_SHOWNORMAL, ewNoWait, Code);
+  end else begin
+    MsgBox('暂未生成日志文件。', mbInformation, MB_OK);
+  end;
+end;
+
+procedure InitializeWizard;
+var
+  i, TopPos: Integer;
+begin
+  InitStepNames();
+  StepsPage := CreateCustomPage(wpReady, '正在配置 Gemini-CLI 环境', '将按步骤自动完成安装与配置');
+
+  TopPos := ScaleY(8);
+  for i := 0 to StepCount-1 do begin
+    StepLabels[i] := TNewStaticText.Create(StepsPage);
+    StepLabels[i].Parent := StepsPage.Surface;
+    StepLabels[i].Left := ScaleX(12);
+    StepLabels[i].Top := TopPos;
+    StepLabels[i].AutoSize := True;
+    StepLabels[i].Caption := '';
+    TopPos := TopPos + ScaleY(18);
+  end;
+
+  StepBar := TNewProgressBar.Create(StepsPage);
+  StepBar.Parent := StepsPage.Surface;
+  StepBar.Left := ScaleX(12);
+  StepBar.Top := TopPos + ScaleY(4);
+  StepBar.Width := StepsPage.SurfaceWidth - ScaleX(24);
+  StepBar.Style := npbstNormal;
+
+  ViewLogBtn := TNewButton.Create(StepsPage);
+  ViewLogBtn.Parent := StepsPage.Surface;
+  ViewLogBtn.Left := StepBar.Left;
+  ViewLogBtn.Top := StepBar.Top + ScaleY(28);
+  ViewLogBtn.Width := ScaleX(120);
+  ViewLogBtn.Caption := '查看安装日志';
+  ViewLogBtn.OnClick := @OnViewLogClick;
+
+  StepPendingAll();
+  NpmLogPath := ExpandConstant('{tmp}\npm-install.log');
+  StepsStarted := False;
 end;
 
 function TryGetNodeVersionViaCmd(const NodeExe: string; const OutFile: string): Boolean;
@@ -222,35 +338,93 @@ begin
   ; // 保险起见，也把 Node 安装目录加入用户 PATH（Node MSI 通常已写入系统 PATH）
   AppendToUserPath(ExpandConstant('{pf}\nodejs'));
 
-  if not ExecAsOriginalUserWait(NpmCmd, 'install -g @google/gemini-cli') then begin
+  ; // 记录 npm 安装日志
+  DeleteFile(NpmLogPath);
+
+  if not ExecAsOriginalUserWait(ExpandConstant('{cmd}'),
+      '/c ""' + NpmCmd + '" install -g @google/gemini-cli > "' + NpmLogPath + '" 2>&1"') then begin
     MsgBox('安装 gemini-cli 失败，请检查网络后重试。', mbError, MB_OK);
   end else begin
     ; // 安装完成后校验：以原始用户运行，读取 %APPDATA%\npm 下的 gemini.cmd
     ExecAsOriginalUserWait(ExpandConstant('{cmd}'),
-      '/c "%APPDATA%\npm\gemini.cmd" --version');
+      '/c "%APPDATA%\npm\gemini.cmd" --version >> "' + NpmLogPath + '" 2>&1');
+  end;
+end;
+
+procedure ExecuteAllSteps();
+var
+  Msi: string;
+  SkipNode: Boolean;
+begin
+  if StepsStarted then Exit;
+  StepsStarted := True;
+  StepPendingAll();
+
+  ; // 0. 检测 Node 版本
+  StepStart(0);
+  SkipNode := ShouldSkipNodeInstall();
+  StepDone(0);
+
+  ; // 1,2. Node 下载与安装（按需）
+  if not SkipNode then begin
+    StepStart(1);
+    Msi := ExpandConstant('{tmp}\node.msi');
+    if not DownloadNodeMsi(Msi) then begin
+      StepFail(1);
+      MsgBox('无法下载或找到 Node.js 安装包，请检查网络或将 MSI 与安装器放同目录后重试。', mbError, MB_OK);
+      exit;
+    end else
+      StepDone(1);
+
+    StepStart(2);
+    if not InstallNodeFromMsi(Msi) then begin
+      StepFail(2);
+      MsgBox('Node.js 安装失败。', mbError, MB_OK);
+      exit;
+    end else
+      StepDone(2);
+  end else begin
+    StepSkip(1);
+    StepSkip(2);
+  end;
+
+  ; // 3. 更新 PATH（用户级）
+  StepStart(3);
+  AppendToUserPath(ExpandConstant('{userappdata}\npm'));
+  AppendToUserPath(ExpandConstant('{pf}\nodejs'));
+  StepDone(3);
+
+  ; // 4. 安装 gemini-cli（写日志）
+  StepStart(4);
+  InstallGeminiCliForCurrentUser;
+  StepDone(4);
+
+  ; // 5. 验证 gemini
+  StepStart(5);
+  if FileExists(ExpandConstant('{userappdata}\npm\gemini.cmd')) then
+    StepDone(5)
+  else
+    StepFail(5);
+
+  ; // 6. 注册右键菜单（由 [Registry] 执行，这里标记完成）
+  StepDone(6);
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if (StepsPage <> nil) and (CurPageID = StepsPage.ID) then begin
+    WizardForm.NextButton.Enabled := False;
+    WizardForm.BackButton.Enabled := False;
+    try
+      ExecuteAllSteps();
+    finally
+      WizardForm.NextButton.Enabled := True;
+      WizardForm.BackButton.Enabled := True;
+    end;
   end;
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
-var
-  Msi: string;
 begin
-  if CurStep = ssInstall then begin
-    if ShouldSkipNodeInstall() then begin
-      Log('Node version >= ' + NodeMinVersion + ', skip Node installation.');
-    end else begin
-      Msi := ExpandConstant('{tmp}\node.msi');
-      if not DownloadNodeMsi(Msi) then begin
-        MsgBox('无法下载或找到 Node.js 安装包，请检查网络或将 MSI 与安装器放同目录后重试。', mbError, MB_OK);
-        exit;
-      end;
-      if not InstallNodeFromMsi(Msi) then begin
-        MsgBox('Node.js 安装失败。', mbError, MB_OK);
-        exit;
-      end;
-    end;
-
-    ; // 安装/跳过 Node 后，为当前用户准备 npm 与 PATH，并安装 gemini-cli
-    InstallGeminiCliForCurrentUser;
-  end;
+  { 不再在安装阶段切换页面或执行步骤，逻辑已迁移到 CurPageChanged }
 end;
