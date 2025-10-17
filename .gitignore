@@ -1,0 +1,24 @@
+# Build/Output artifacts
+Output/
+
+# Executables/Installers
+*.exe
+*.msi
+*.zip
+*.7z
+
+# Logs and temp files
+*.log
+*.tmp
+*.bak
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# IDE/editor settings
+.vscode/
+.idea/
+*.iml
+
+

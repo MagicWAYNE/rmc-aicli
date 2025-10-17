@@ -1,0 +1,18 @@
+# Ensure Windows-friendly line endings for text files in working tree
+* text=auto eol=crlf
+
+# Preserve binary
+*.exe binary
+*.msi binary
+*.zip binary
+*.7z binary
+
+# Scripts keep CRLF (PowerShell/Batch/Reg)
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.reg text eol=crlf
+
+# Source files normalization
+*.iss text eol=crlf
+*.md text eol=lf
